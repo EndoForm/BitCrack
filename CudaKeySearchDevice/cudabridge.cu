@@ -1,17 +1,6 @@
 #include "cudabridge.h"
 
-__global__ void keyFinderKernel(int points, int compression);
-__global__ void keyFinderKernelWithDouble(int points, int compression);
-
-void callKeyFinderKernel(int blocks, int threads, int points, bool useDouble,
-                         int compression) {
-  if (useDouble) {
-    keyFinderKernelWithDouble<<<blocks, threads>>>(points, compression);
-  } else {
-    keyFinderKernel<<<blocks, threads>>>(points, compression);
-  }
-  waitForKernel();
-}
+// function callKeyFinderKernel moved to CudaKeySearchDevice.cu
 
 void waitForKernel() {
   // Check for kernel launch error

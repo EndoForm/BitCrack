@@ -789,8 +789,7 @@ completeBatchAdd(const unsigned int *px, const unsigned int *py,
   subModP(newY, py, newY);
 }
 
-invModP(inverse);
-}
+__device__ static void doBatchInverse(unsigned int value[8]) { invModP(value); }
 
 __device__ __forceinline__ static void
 beginBatchAddShared(const unsigned int *px, const unsigned int *x,
