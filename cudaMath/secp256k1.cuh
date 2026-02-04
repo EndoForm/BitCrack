@@ -124,6 +124,24 @@ __device__ static void writeInt(unsigned int *ara, int idx,
   }
 }
 
+__device__ static void writeIntShared(unsigned int *s_chain, int batchIdx,
+                                      const unsigned int x[8]) {
+  int stride = blockDim.x;
+  int base = (batchIdx * 8) * stride + threadIdx.x;
+  for (int i = 0; i < 8; i++) {
+    s_chain[base + i * stride] = x[i];
+  }
+}
+
+__device__ static void readIntShared(const unsigned int *s_chain, int batchIdx,
+                                     unsigned int x[8]) {
+  int stride = blockDim.x;
+  int base = (batchIdx * 8) * stride + threadIdx.x;
+  for (int i = 0; i < 8; i++) {
+    x[i] = s_chain[base + i * stride];
+  }
+}
+
 /**
  * Access pattern for shared memory to avoid bank conflicts.
  * Interleaves words across threads.
@@ -616,6 +634,10 @@ __device__ static void invModP(const unsigned int *value,
   invModP(inverse);
 }
 
+__device__ static void doBatchInverse(unsigned int *inverse) {
+  invModP(inverse);
+}
+
 __device__ static void negModP(const unsigned int *value,
                                unsigned int *negative) {
   sub_cc(negative[0], _P[0], value[0]);
@@ -787,9 +809,6 @@ completeBatchAdd(const unsigned int *px, const unsigned int *py,
   subModP(px, newX, k);
   mulModP(s, k, newY);
   subModP(newY, py, newY);
-}
-
-invModP(inverse);
 }
 
 __device__ __forceinline__ static void

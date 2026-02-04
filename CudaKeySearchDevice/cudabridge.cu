@@ -2,6 +2,7 @@
 
 __global__ void keyFinderKernel(int points, int compression);
 __global__ void keyFinderKernelWithDouble(int points, int compression);
+__global__ void keyFinderKernelFast(int compression);
 
 void callKeyFinderKernel(int blocks, int threads, int points, bool useDouble,
                          int compression) {
@@ -10,6 +11,12 @@ void callKeyFinderKernel(int blocks, int threads, int points, bool useDouble,
   } else {
     keyFinderKernel<<<blocks, threads>>>(points, compression);
   }
+  waitForKernel();
+}
+
+void callKeyFinderKernelFast(int blocks, int threads, int sharedMem,
+                             int compression) {
+  keyFinderKernelFast<<<blocks, threads, sharedMem>>>(compression);
   waitForKernel();
 }
 
