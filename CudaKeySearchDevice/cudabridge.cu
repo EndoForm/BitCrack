@@ -4,6 +4,7 @@ __global__ void keyFinderKernel(int points, int compression);
 __global__ void keyFinderKernelWithDouble(int points, int compression);
 __global__ void keyFinderKernelFast(int compression);
 
+extern "C" {
 void callKeyFinderKernel(int blocks, int threads, int points, bool useDouble,
                          int compression) {
   if (useDouble) {
@@ -34,4 +35,5 @@ void waitForKernel() {
   if (err != cudaSuccess) {
     throw cuda::CudaException(err);
   }
+}
 }

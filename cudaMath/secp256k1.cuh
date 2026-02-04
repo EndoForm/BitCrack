@@ -124,24 +124,6 @@ __device__ static void writeInt(unsigned int *ara, int idx,
   }
 }
 
-__device__ static void writeIntShared(unsigned int *s_chain, int batchIdx,
-                                      const unsigned int x[8]) {
-  int stride = blockDim.x;
-  int base = (batchIdx * 8) * stride + threadIdx.x;
-  for (int i = 0; i < 8; i++) {
-    s_chain[base + i * stride] = x[i];
-  }
-}
-
-__device__ static void readIntShared(const unsigned int *s_chain, int batchIdx,
-                                     unsigned int x[8]) {
-  int stride = blockDim.x;
-  int base = (batchIdx * 8) * stride + threadIdx.x;
-  for (int i = 0; i < 8; i++) {
-    x[i] = s_chain[base + i * stride];
-  }
-}
-
 /**
  * Access pattern for shared memory to avoid bank conflicts.
  * Interleaves words across threads.
