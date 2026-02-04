@@ -25,8 +25,6 @@ struct CudaDeviceResult {
 extern "C" {
 void callKeyFinderKernel(int blocks, int threads, int pointsPerThread,
                          bool compressed, int compression);
-void callKeyFinderKernelFast(int blocks, int threads, int sharedMem,
-                             int compression);
 }
 
 class CudaKeySearchDevice : public KeySearchDevice {

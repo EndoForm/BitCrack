@@ -56,9 +56,8 @@ CudaKeySearchDevice::CudaKeySearchDevice(int device, int threads,
 
   _device = device;
 
-  _threads =
-      256; // Maximize occupancy with Cooperative Inverse (24KB shared mem)
-  _pointsPerThread = 1; // 1 point per thread to zero register spilling
+  // Restore high points-per-thread for original kernel's batch inversion
+  _pointsPerThread = pointsPerThread;
 }
 
 void CudaKeySearchDevice::init(const secp256k1::uint256 &start, int compression,
@@ -154,21 +153,20 @@ void CudaKeySearchDevice::doStep() {
   uint64_t numKeys = (uint64_t)_blocks * _threads * _pointsPerThread;
 
   try {
-    // 24KB Shared Memory per block (256 threads * 1 point * 3 buffers * 32
-    // bytes) We perform 1024 steps per launch
-    callKeyFinderKernelFast(_blocks, _threads, 24 * 1024, _compression);
+    // Use the original, proven kernel with global memory batch inversion
+    callKeyFinderKernel(_blocks, _threads, _pointsPerThread, _iterations == 0,
+                        _compression);
   } catch (cuda::CudaException ex) {
     throw KeySearchException(ex.msg);
   }
 
   getResultsInternal();
 
-  // Increment by the number of steps performed in the kernel
-  _iterations += 1024;
+  _iterations++;
 }
 
 uint64_t CudaKeySearchDevice::keysPerStep() {
-  return (uint64_t)_blocks * _threads * _pointsPerThread * 1024;
+  return (uint64_t)_blocks * _threads * _pointsPerThread;
 }
 
 std::string CudaKeySearchDevice::getDeviceName() { return _deviceName; }

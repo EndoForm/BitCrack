@@ -244,93 +244,6 @@ __device__ void doIterationWithDouble(int pointsPerThread, int compression) {
   }
 }
 
-// Fast kernel constants
-#define FAST_POINTS 1
-#define FAST_STEPS 1024
-
-__device__ void doIterationFast(int compression) {
-  extern __shared__ unsigned int s_mem[];
-
-  // Layout:
-  // s_chain: [0 ... dim*8]
-  // s_inverse: [dim*8 ... 3*dim*8] (scratchpad for block inverse)
-  unsigned int *s_chain = s_mem;
-  unsigned int *s_inverse_scratch = &s_mem[blockDim.x * 8];
-
-  unsigned int *xPtr = ec::getXPtr();
-  unsigned int *yPtr = ec::getYPtr();
-
-  // Registers for points
-  unsigned int rx[FAST_POINTS][8];
-  unsigned int ry[FAST_POINTS][8];
-
-  // Load from global to registers
-  for (int i = 0; i < FAST_POINTS; i++) {
-    readInt(xPtr, i, rx[i]);
-    readInt(yPtr, i, ry[i]);
-  }
-
-  // Iterate without global memory access
-  for (int step = 0; step < FAST_STEPS; step++) {
-
-    unsigned int inverse[8] = {0, 0, 0, 0, 0, 0, 0, 1};
-
-    // 1. Accumulate product
-    for (int i = 0; i < FAST_POINTS; i++) {
-      // Check hash (for the current point)
-      unsigned int digest[5];
-      if (compression == PointCompressionType::UNCOMPRESSED ||
-          compression == PointCompressionType::BOTH) {
-        hashPublicKey(rx[i], ry[i], digest);
-        if (checkHash(digest))
-          setResultFound(i, false, rx[i], ry[i], digest, step);
-      }
-      if (compression == PointCompressionType::COMPRESSED ||
-          compression == PointCompressionType::BOTH) {
-        hashPublicKeyCompressed(rx[i], ry[i][7] & 1, digest);
-        if (checkHash(digest))
-          setResultFound(i, true, rx[i], ry[i], digest, step);
-      }
-
-      // Begin batch add (using registers and shared chain)
-      // Note: for FAST_POINTS=1, 'i' is always 0. But batchIdx should be
-      // 'step'? No, beginBatchAddShared takes 'batchIdx'. But we are doing 1
-      // point per thread. The 'chain' is per-thread. So batchIdx should be 0??
-      // Wait, beginBatchAddShared writes to chain[batchIdx].
-      // For standard batch add, it writes to chain linear array.
-      // Here, each thread has its own chain slot in shared mem?
-      // No, writes to s_chain[batchIdx].
-      // For single point, batchIdx is 0.
-      beginBatchAddWithDoubleSharedReg(_INC_X, _INC_Y, rx[i], s_chain,
-                                       threadIdx.x, inverse);
-    }
-
-    // 2. Invert (Cooperative Block Inverse)
-    // We pass 'inverse' (which holds the product for this thread)
-    // The function computes the inverse in-place.
-    doBlockInverse(inverse, s_inverse_scratch);
-
-    // 3. Backtrack / Complete
-    for (int i = FAST_POINTS - 1; i >= 0; i--) {
-      unsigned int newX[8];
-      unsigned int newY[8];
-
-      completeBatchAddSharedReg(_INC_X, _INC_Y, rx[i], ry[i], threadIdx.x,
-                                s_chain, inverse, newX, newY);
-
-      // Update registers
-      copyBigInt(newX, rx[i]);
-      copyBigInt(newY, ry[i]);
-    }
-  }
-
-  // Write back to global
-  for (int i = 0; i < FAST_POINTS; i++) {
-    writeInt(xPtr, i, rx[i]);
-    writeInt(yPtr, i, ry[i]);
-  }
-}
-
 /**
  * Performs a single iteration
  */
@@ -342,10 +255,6 @@ __global__ void keyFinderKernelWithDouble(int points, int compression) {
   doIterationWithDouble(points, compression);
 }
 
-__global__ void keyFinderKernelFast(int compression) {
-  doIterationFast(compression);
-}
-
 extern "C" {
 void callKeyFinderKernel(int blocks, int threads, int pointsPerThread,
                          bool useDouble, int compression) {
@@ -355,12 +264,6 @@ void callKeyFinderKernel(int blocks, int threads, int pointsPerThread,
   } else {
     keyFinderKernel<<<blocks, threads>>>(pointsPerThread, compression);
   }
-  cudaDeviceSynchronize();
-}
-
-void callKeyFinderKernelFast(int blocks, int threads, int sharedMem,
-                             int compression) {
-  keyFinderKernelFast<<<blocks, threads, sharedMem>>>(compression);
   cudaDeviceSynchronize();
 }
 }
