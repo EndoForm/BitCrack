@@ -20,6 +20,7 @@ void callKeyFinderKernelFast(int blocks, int threads, int sharedMem,
   keyFinderKernelFast<<<blocks, threads, sharedMem>>>(compression);
   waitForKernel();
 }
+}
 
 void waitForKernel() {
   // Check for kernel launch error
@@ -35,5 +36,4 @@ void waitForKernel() {
   if (err != cudaSuccess) {
     throw cuda::CudaException(err);
   }
-}
 }
