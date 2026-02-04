@@ -329,3 +329,22 @@ __global__ void keyFinderKernelWithDouble(int points, int compression) {
 __global__ void keyFinderKernelFast(int compression) {
   doIterationFast(compression);
 }
+
+extern "C" {
+void callKeyFinderKernel(int blocks, int threads, int pointsPerThread,
+                         bool useDouble, int compression) {
+  if (useDouble) {
+    keyFinderKernelWithDouble<<<blocks, threads>>>(pointsPerThread,
+                                                   compression);
+  } else {
+    keyFinderKernel<<<blocks, threads>>>(pointsPerThread, compression);
+  }
+  cudaDeviceSynchronize();
+}
+
+void callKeyFinderKernelFast(int blocks, int threads, int sharedMem,
+                             int compression) {
+  keyFinderKernelFast<<<blocks, threads, sharedMem>>>(compression);
+  cudaDeviceSynchronize();
+}
+}
