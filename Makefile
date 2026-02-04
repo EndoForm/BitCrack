@@ -1,3 +1,6 @@
+BUILD_CUDA ?= 1
+CPATH := $(CPATH):$(shell pwd)/KeyFinderLib:$(shell pwd)/util:$(shell pwd)/secp256k1lib:$(shell pwd)/CryptoUtil:$(shell pwd)/AddressUtil:$(shell pwd)/Logger:$(shell pwd)/CmdParse
+export CPATH
 
 CUR_DIR=$(shell pwd)
 DIRS=util AddressUtil CmdParse CryptoUtil KeyFinderLib CLKeySearchDevice CudaKeySearchDevice cudaMath clUtil cudaUtil secp256k1lib Logger embedcl
