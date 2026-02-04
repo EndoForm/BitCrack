@@ -801,17 +801,8 @@ __device__ static void doBlockInverse(unsigned int *val, unsigned int *s_mem) {
   int tid = threadIdx.x;
   int dim = blockDim.x;
 
-  // 1. Exclusive Prefix Scan (using Hillis-Steele)
-  // s_prefix will occupy s_mem[0...dim*8-1]
-  unsigned int *s_prefix = s_mem;
-
-  // Initialize
-  writeIntShared(s_prefix, tid,
-                 val); // Using interleaved write for bank conflict avoidance?
-  // Wait, mulModP expects linear arrays. writeIntShared produces interleaved.
-  // If we use interleaved, mulModP fails. We must use linear blocking for
-  // standard functions. But banks conflicts will happen. It's fine, math is the
-  // bottleneck.
+  // Initialize with linear layout (bank conflicts acceptable, math is
+  // bottleneck)
   unsigned int *s_linear_prefix = s_mem;
   copyBigInt(val, &s_linear_prefix[tid * 8]);
 
