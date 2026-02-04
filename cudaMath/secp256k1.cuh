@@ -105,6 +105,9 @@ __device__ static unsigned int readIntLSW(const unsigned int *ara, int idx) {
 /**
  * Writes an 8-word big integer to device memory
  */
+/**
+ * Writes an 8-word big integer to device memory
+ */
 __device__ static void writeInt(unsigned int *ara, int idx,
                                 const unsigned int x[8]) {
   uint64_t totalThreads = (uint64_t)gridDim.x * blockDim.x;
@@ -118,6 +121,27 @@ __device__ static void writeInt(unsigned int *ara, int idx,
   for (int i = 0; i < 8; i++) {
     ara[index] = x[i];
     index += totalThreads;
+  }
+}
+
+/**
+ * Access pattern for shared memory to avoid bank conflicts.
+ * Interleaves words across threads.
+ * Layout: [Point0_Word0_Thread0, Point0_Word0_Thread1, ...]
+ */
+__device__ static void readIntShared(const unsigned int *ara, int idx,
+                                     unsigned int x[8]) {
+  int offset = (idx * 8) * blockDim.x + threadIdx.x;
+  for (int i = 0; i < 8; i++) {
+    x[i] = ara[offset + i * blockDim.x];
+  }
+}
+
+__device__ static void writeIntShared(unsigned int *ara, int idx,
+                                      const unsigned int x[8]) {
+  int offset = (idx * 8) * blockDim.x + threadIdx.x;
+  for (int i = 0; i < 8; i++) {
+    ara[offset + i * blockDim.x] = x[i];
   }
 }
 
@@ -765,8 +789,117 @@ completeBatchAdd(const unsigned int *px, const unsigned int *py,
   subModP(newY, py, newY);
 }
 
-__device__ __forceinline__ static void doBatchInverse(unsigned int inverse[8]) {
-  invModP(inverse);
+invModP(inverse);
+}
+
+__device__ __forceinline__ static void
+beginBatchAddShared(const unsigned int *px, const unsigned int *x,
+                    unsigned int *chain, int i, int batchIdx,
+                    unsigned int inverse[8]) {
+  // x = Gx - x
+  unsigned int t[8];
+  subModP(px, x, t);
+
+  // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 *
+  // diff1, c[2] = diff2 * diff1 * diff0, etc
+  mulModP(t, inverse);
+
+  writeIntShared(chain, batchIdx, inverse);
+}
+
+__device__ __forceinline__ static void
+beginBatchAddWithDoubleShared(const unsigned int *px, const unsigned int *py,
+                              unsigned int *xPtr, unsigned int *chain, int i,
+                              int batchIdx, unsigned int inverse[8]) {
+  unsigned int x[8];
+  // Note: For register-based kernel, xPtr/yPtr handling is different
+  // but for compatibility we assume xPtr is global or checking callers.
+  // Actually, for the fast kernel, x is in registers.
+  // We overload this to take x directly?
+  // No, we will make a version that takes x array.
+  readInt(xPtr, i, x);
+
+  if (equal(px, x)) {
+    addModP(py, py, x);
+  } else {
+    // x = Gx - x
+    subModP(px, x, x);
+  }
+
+  mulModP(x, inverse);
+
+  writeIntShared(chain, batchIdx, inverse);
+}
+
+// Version where x is already loaded
+__device__ __forceinline__ static void
+beginBatchAddWithDoubleSharedReg(const unsigned int *px, const unsigned int *py,
+                                 unsigned int x[8], unsigned int *chain,
+                                 int batchIdx, unsigned int inverse[8]) {
+  unsigned int t[8];
+  if (equal(px, x)) {
+    addModP(py, py, t);
+  } else {
+    subModP(px, x, t);
+  }
+  mulModP(t, inverse);
+  writeIntShared(chain, batchIdx, inverse);
+}
+
+__device__ static void
+completeBatchAddSharedReg(const unsigned int *px, const unsigned int *py,
+                          unsigned int x[8], unsigned int y[8], int batchIdx,
+                          unsigned int *chain, unsigned int *inverse,
+                          unsigned int newX[8], unsigned int newY[8]) {
+  unsigned int s[8];
+
+  if (batchIdx >= 1) {
+    unsigned int c[8];
+
+    readIntShared(chain, batchIdx - 1, c);
+    mulModP(inverse, c, s);
+
+    unsigned int diff[8];
+    if (equal(px, x)) {
+      // Should match logic in beginBatchAdd
+      addModP(py, py, diff);
+    } else {
+      subModP(px, x, diff);
+    }
+    mulModP(diff, inverse);
+  } else {
+    copyBigInt(inverse, s);
+  }
+
+  // Common point add logic
+  if (equal(px, x)) {
+    unsigned int x2[8];
+    unsigned int tx2[8];
+    mulModP(x, x, x2);
+    addModP(x2, x2, tx2);
+    addModP(x2, tx2, tx2);
+    mulModP(tx2, s);
+    unsigned int s2[8];
+    mulModP(s, s, s2);
+    subModP(s2, x, newX);
+    subModP(newX, x, newX);
+    unsigned int k[8];
+    subModP(px, newX, k);
+    mulModP(s, k, newY);
+    subModP(newY, py, newY);
+  } else {
+    unsigned int rise[8];
+    subModP(py, y, rise);
+    mulModP(rise, s);
+    unsigned int s2[8];
+    mulModP(s, s, s2);
+    subModP(s2, px, newX);
+    subModP(newX, x, newX);
+    unsigned int k[8];
+    subModP(px, newX, k);
+    mulModP(s, k, newY);
+    subModP(newY, py, newY);
+  }
 }
 
 #endif

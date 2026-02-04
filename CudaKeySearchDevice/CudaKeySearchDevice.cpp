@@ -56,7 +56,8 @@ CudaKeySearchDevice::CudaKeySearchDevice(int device, int threads,
 
   _device = device;
 
-  _pointsPerThread = pointsPerThread;
+  _pointsPerThread =
+      4; // Force 4 points per thread for Fast Mode register optimization
 }
 
 void CudaKeySearchDevice::init(const secp256k1::uint256 &start, int compression,
@@ -152,20 +153,17 @@ void CudaKeySearchDevice::doStep() {
   uint64_t numKeys = (uint64_t)_blocks * _threads * _pointsPerThread;
 
   try {
-    if (_iterations < 2 && _startExponent.cmp(numKeys) <= 0) {
-      callKeyFinderKernel(_blocks, _threads, _pointsPerThread, true,
-                          _compression);
-    } else {
-      callKeyFinderKernel(_blocks, _threads, _pointsPerThread, false,
-                          _compression);
-    }
+    // 32KB Shared Memory per block (256 threads * 4 points * 8 words * 4 bytes)
+    // We perform 1024 steps per launch, fully registerizing the keys
+    callKeyFinderKernelFast(_blocks, _threads, 32 * 1024, _compression);
   } catch (cuda::CudaException ex) {
     throw KeySearchException(ex.msg);
   }
 
   getResultsInternal();
 
-  _iterations++;
+  // Increment by the number of steps performed in the kernel
+  _iterations += 1024;
 }
 
 uint64_t CudaKeySearchDevice::keysPerStep() {
@@ -239,10 +237,11 @@ void CudaKeySearchDevice::getResultsInternal() {
     KeySearchResult minerResult;
 
     // Calculate the private key based on the number of iterations and the
-    // current thread
+    // current thread. We include rPtr->step because the fast kernel performs
+    // multiple internal steps per iteration.
     secp256k1::uint256 offset =
         secp256k1::uint256((uint64_t)_blocks * _threads * _pointsPerThread) *
-            _iterations +
+            (_iterations + rPtr->step) +
         secp256k1::uint256(
             getPrivateKeyOffset(rPtr->thread, rPtr->block, rPtr->idx));
 

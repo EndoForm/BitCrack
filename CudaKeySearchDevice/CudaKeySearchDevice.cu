@@ -110,8 +110,10 @@ __device__ void hashPublicKeyCompressed(const unsigned int *x,
 }
 
 __device__ void setResultFound(int idx, bool compressed, unsigned int x[8],
-                               unsigned int y[8], unsigned int digest[5]) {
+                               unsigned int y[8], unsigned int digest[5],
+                               int step) {
   CudaDeviceResult r;
+  r.step = step;
 
   r.block = blockIdx.x;
   r.thread = threadIdx.x;
@@ -150,7 +152,7 @@ __device__ void doIteration(int pointsPerThread, int compression) {
       hashPublicKey(x, y, digest);
 
       if (checkHash(digest)) {
-        setResultFound(i, false, x, y, digest);
+        setResultFound(i, false, x, y, digest, 0);
       }
     }
 
@@ -161,7 +163,7 @@ __device__ void doIteration(int pointsPerThread, int compression) {
       if (checkHash(digest)) {
         unsigned int y[8];
         readInt(yPtr, i, y);
-        setResultFound(i, true, x, y, digest);
+        setResultFound(i, true, x, y, digest, 0);
       }
     }
 
@@ -205,7 +207,7 @@ __device__ void doIterationWithDouble(int pointsPerThread, int compression) {
       hashPublicKey(x, y, digest);
 
       if (checkHash(digest)) {
-        setResultFound(i, false, x, y, digest);
+        setResultFound(i, false, x, y, digest, 0);
       }
     }
 
@@ -220,7 +222,7 @@ __device__ void doIterationWithDouble(int pointsPerThread, int compression) {
         unsigned int y[8];
         readInt(yPtr, i, y);
 
-        setResultFound(i, true, x, y, digest);
+        setResultFound(i, true, x, y, digest, 0);
       }
     }
 
@@ -242,6 +244,77 @@ __device__ void doIterationWithDouble(int pointsPerThread, int compression) {
   }
 }
 
+// Fast kernel constants
+#define FAST_POINTS 4
+#define FAST_STEPS 1024
+
+__device__ void doIterationFast(int compression) {
+  extern __shared__ unsigned int s_chain[];
+
+  unsigned int *xPtr = ec::getXPtr();
+  unsigned int *yPtr = ec::getYPtr();
+
+  // Registers for points
+  unsigned int rx[FAST_POINTS][8];
+  unsigned int ry[FAST_POINTS][8];
+
+  // Load from global to registers
+  for (int i = 0; i < FAST_POINTS; i++) {
+    readInt(xPtr, i, rx[i]);
+    readInt(yPtr, i, ry[i]);
+  }
+
+  // Iterate without global memory access
+  for (int step = 0; step < FAST_STEPS; step++) {
+
+    unsigned int inverse[8] = {0, 0, 0, 0, 0, 0, 0, 1};
+
+    // 1. Accumulate product
+    for (int i = 0; i < FAST_POINTS; i++) {
+      // Check hash (for the current point)
+      unsigned int digest[5];
+      if (compression == PointCompressionType::UNCOMPRESSED ||
+          compression == PointCompressionType::BOTH) {
+        hashPublicKey(rx[i], ry[i], digest);
+        if (checkHash(digest))
+          setResultFound(i, false, rx[i], ry[i], digest, step);
+      }
+      if (compression == PointCompressionType::COMPRESSED ||
+          compression == PointCompressionType::BOTH) {
+        hashPublicKeyCompressed(rx[i], ry[i][7] & 1, digest);
+        if (checkHash(digest))
+          setResultFound(i, true, rx[i], ry[i], digest, step);
+      }
+
+      // Begin batch add (using registers and shared chain)
+      beginBatchAddWithDoubleSharedReg(_INC_X, _INC_Y, rx[i], s_chain, i,
+                                       inverse);
+    }
+
+    // 2. Invert
+    doBatchInverse(inverse);
+
+    // 3. Backtrack / Complete
+    for (int i = FAST_POINTS - 1; i >= 0; i--) {
+      unsigned int newX[8];
+      unsigned int newY[8];
+
+      completeBatchAddSharedReg(_INC_X, _INC_Y, rx[i], ry[i], i, s_chain,
+                                inverse, newX, newY);
+
+      // Update registers
+      copyBigInt(newX, rx[i]);
+      copyBigInt(newY, ry[i]);
+    }
+  }
+
+  // Write back to global
+  for (int i = 0; i < FAST_POINTS; i++) {
+    writeInt(xPtr, i, rx[i]);
+    writeInt(yPtr, i, ry[i]);
+  }
+}
+
 /**
  * Performs a single iteration
  */
@@ -251,4 +324,8 @@ __global__ void keyFinderKernel(int points, int compression) {
 
 __global__ void keyFinderKernelWithDouble(int points, int compression) {
   doIterationWithDouble(points, compression);
+}
+
+__global__ void keyFinderKernelFast(int compression) {
+  doIterationFast(compression);
 }
