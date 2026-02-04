@@ -791,6 +791,103 @@ completeBatchAdd(const unsigned int *px, const unsigned int *py,
 
 __device__ static void doBatchInverse(unsigned int value[8]) { invModP(value); }
 
+/**
+ * Cooperative Parallel Modular Inversion (Block-wide)
+ * Uses shared memory to perform prefix/suffix scans, amortizing 1 inversion
+ * across blockDim.x threads. s_mem size required: (2 * blockDim.x * 8 *
+ * sizeof(uint)) + sizeof(uint)*8
+ */
+__device__ static void doBlockInverse(unsigned int *val, unsigned int *s_mem) {
+  int tid = threadIdx.x;
+  int dim = blockDim.x;
+
+  // 1. Exclusive Prefix Scan (using Hillis-Steele)
+  // s_prefix will occupy s_mem[0...dim*8-1]
+  unsigned int *s_prefix = s_mem;
+
+  // Initialize
+  writeIntShared(s_prefix, tid,
+                 val); // Using interleaved write for bank conflict avoidance?
+  // Wait, mulModP expects linear arrays. writeIntShared produces interleaved.
+  // If we use interleaved, mulModP fails. We must use linear blocking for
+  // standard functions. But banks conflicts will happen. It's fine, math is the
+  // bottleneck.
+  unsigned int *s_linear_prefix = s_mem;
+  copyBigInt(val, &s_linear_prefix[tid * 8]);
+
+  __syncthreads();
+
+  // Scan
+  for (int offset = 1; offset < dim; offset *= 2) {
+    unsigned int temp[8];
+    if (tid >= offset) {
+      mulModP(&s_linear_prefix[tid * 8], &s_linear_prefix[(tid - offset) * 8],
+              temp);
+    }
+    __syncthreads();
+    if (tid >= offset) {
+      copyBigInt(temp, &s_linear_prefix[tid * 8]);
+    }
+    __syncthreads();
+  }
+
+  // s_linear_prefix[tid] is now Inclusive Prefix Product
+
+  // 2. Invert Total Product
+  unsigned int totalInverse[8];                   // Thread local
+  unsigned int *s_totalInv = &s_mem[2 * dim * 8]; // At end of buffer
+
+  if (tid == dim - 1) {
+    invModP(&s_linear_prefix[tid * 8], totalInverse);
+    copyBigInt(totalInverse, s_totalInv);
+  }
+  __syncthreads();
+
+  // Read broadcasted inverse
+  copyBigInt(s_totalInv, totalInverse);
+
+  // 3. Inclusive Suffix Scan (on Reversed data)
+  unsigned int *s_suffix = &s_mem[dim * 8];
+  int rev_tid = dim - 1 - tid; // 0->63, 63->0
+
+  // Load reversed
+  copyBigInt(val, &s_suffix[rev_tid * 8]);
+  __syncthreads();
+
+  // Scan reversed array
+  for (int offset = 1; offset < dim; offset *= 2) {
+    unsigned int temp[8];
+    if (tid >= offset) {
+      mulModP(&s_suffix[tid * 8], &s_suffix[(tid - offset) * 8], temp);
+    }
+    __syncthreads();
+    if (tid >= offset) {
+      copyBigInt(temp, &s_suffix[tid * 8]);
+    }
+    __syncthreads();
+  }
+  // s_suffix[tid] now holds Inclusive Suffix Product for element at rev_tid?
+  // No, s_suffix[tid] holds Product(Rev[0]...Rev[tid]).
+  // Rev[i] is x[dim-1-i].
+
+  // 4. Compute Final Inverse
+  // inv[i] = Prefix[i-1] * Suffix[i+1] * TotalInv
+  unsigned int res[8];
+  copyBigInt(totalInverse, res);
+
+  if (tid > 0) {
+    mulModP(&s_linear_prefix[(tid - 1) * 8], res);
+  }
+  if (tid < dim - 1) {
+    // We need Suffix[tid+1] = Product(x[tid+1]...x[last])
+    // = Product(Rev[0]...Rev[dim-1-(tid+1)])
+    // = s_suffix[dim - tid - 2]
+    mulModP(&s_suffix[(dim - tid - 2) * 8], res);
+  }
+
+  copyBigInt(res, val);
+}
+
 __device__ __forceinline__ static void
 beginBatchAddShared(const unsigned int *px, const unsigned int *x,
                     unsigned int *chain, int i, int batchIdx,

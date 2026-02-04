@@ -245,11 +245,17 @@ __device__ void doIterationWithDouble(int pointsPerThread, int compression) {
 }
 
 // Fast kernel constants
-#define FAST_POINTS 16
+#define FAST_POINTS 1
 #define FAST_STEPS 1024
 
 __device__ void doIterationFast(int compression) {
-  extern __shared__ unsigned int s_chain[];
+  extern __shared__ unsigned int s_mem[];
+
+  // Layout:
+  // s_chain: [0 ... dim*8]
+  // s_inverse: [dim*8 ... 3*dim*8] (scratchpad for block inverse)
+  unsigned int *s_chain = s_mem;
+  unsigned int *s_inverse_scratch = &s_mem[blockDim.x * 8];
 
   unsigned int *xPtr = ec::getXPtr();
   unsigned int *yPtr = ec::getYPtr();
@@ -287,20 +293,30 @@ __device__ void doIterationFast(int compression) {
       }
 
       // Begin batch add (using registers and shared chain)
-      beginBatchAddWithDoubleSharedReg(_INC_X, _INC_Y, rx[i], s_chain, i,
-                                       inverse);
+      // Note: for FAST_POINTS=1, 'i' is always 0. But batchIdx should be
+      // 'step'? No, beginBatchAddShared takes 'batchIdx'. But we are doing 1
+      // point per thread. The 'chain' is per-thread. So batchIdx should be 0??
+      // Wait, beginBatchAddShared writes to chain[batchIdx].
+      // For standard batch add, it writes to chain linear array.
+      // Here, each thread has its own chain slot in shared mem?
+      // No, writes to s_chain[batchIdx].
+      // For single point, batchIdx is 0.
+      beginBatchAddWithDoubleSharedReg(_INC_X, _INC_Y, rx[i], s_chain,
+                                       threadIdx.x, inverse);
     }
 
-    // 2. Invert
-    doBatchInverse(inverse);
+    // 2. Invert (Cooperative Block Inverse)
+    // We pass 'inverse' (which holds the product for this thread)
+    // The function computes the inverse in-place.
+    doBlockInverse(inverse, s_inverse_scratch);
 
     // 3. Backtrack / Complete
     for (int i = FAST_POINTS - 1; i >= 0; i--) {
       unsigned int newX[8];
       unsigned int newY[8];
 
-      completeBatchAddSharedReg(_INC_X, _INC_Y, rx[i], ry[i], i, s_chain,
-                                inverse, newX, newY);
+      completeBatchAddSharedReg(_INC_X, _INC_Y, rx[i], ry[i], threadIdx.x,
+                                s_chain, inverse, newX, newY);
 
       // Update registers
       copyBigInt(newX, rx[i]);

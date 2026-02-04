@@ -56,10 +56,9 @@ CudaKeySearchDevice::CudaKeySearchDevice(int device, int threads,
 
   _device = device;
 
-  _threads = 64; // Optimize for shared memory usage (16 points * 64 threads *
-                 // 32 bytes = 32KB)
-  _pointsPerThread =
-      16; // Force 16 points per thread for Fast Mode register optimization
+  _threads =
+      256; // Maximize occupancy with Cooperative Inverse (24KB shared mem)
+  _pointsPerThread = 1; // 1 point per thread to zero register spilling
 }
 
 void CudaKeySearchDevice::init(const secp256k1::uint256 &start, int compression,
@@ -155,9 +154,9 @@ void CudaKeySearchDevice::doStep() {
   uint64_t numKeys = (uint64_t)_blocks * _threads * _pointsPerThread;
 
   try {
-    // 32KB Shared Memory per block (64 threads * 16 points * 8 words * 4 bytes)
-    // We perform 1024 steps per launch, fully registerizing the keys
-    callKeyFinderKernelFast(_blocks, _threads, 32 * 1024, _compression);
+    // 24KB Shared Memory per block (256 threads * 1 point * 3 buffers * 32
+    // bytes) We perform 1024 steps per launch
+    callKeyFinderKernelFast(_blocks, _threads, 24 * 1024, _compression);
   } catch (cuda::CudaException ex) {
     throw KeySearchException(ex.msg);
   }
