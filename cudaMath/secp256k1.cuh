@@ -616,10 +616,6 @@ __device__ static void invModP(const unsigned int *value,
   invModP(inverse);
 }
 
-__device__ static void doBatchInverse(unsigned int *inverse) {
-  invModP(inverse);
-}
-
 __device__ static void negModP(const unsigned int *value,
                                unsigned int *negative) {
   sub_cc(negative[0], _P[0], value[0]);
@@ -791,6 +787,9 @@ completeBatchAdd(const unsigned int *px, const unsigned int *py,
   subModP(px, newX, k);
   mulModP(s, k, newY);
   subModP(newY, py, newY);
+}
+
+invModP(inverse);
 }
 
 __device__ __forceinline__ static void

@@ -7,12 +7,8 @@
 #include <cuda_runtime.h>
 #include <string>
 
-extern "C" {
 void callKeyFinderKernel(int blocks, int threads, int points, bool useDouble,
                          int compression);
-void callKeyFinderKernelFast(int blocks, int threads, int sharedMem,
-                             int compression);
-}
 
 void waitForKernel();
 
