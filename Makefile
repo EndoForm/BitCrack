@@ -13,12 +13,12 @@ LIBS+=-L$(LIBDIR)
 
 # C++ options
 CXX=g++
-CXXFLAGS=-O2 -std=c++11
+CXXFLAGS=-O2 -std=c++17
 
 # CUDA variables - NVIDIA L4 (Ada Lovelace, sm_89) + CUDA 12.4 on Google Deep Learning VM
 COMPUTE_CAP=89
 NVCC=nvcc
-NVCCFLAGS=-std=c++17 -gencode=arch=compute_${COMPUTE_CAP},code=\"sm_${COMPUTE_CAP}\" -Xptxas="-v" -Xcompiler "${CXXFLAGS}"
+NVCCFLAGS=-std=c++17 -rdc=true -gencode=arch=compute_${COMPUTE_CAP},code=\"sm_${COMPUTE_CAP}\" -Xptxas="-v" -Xcompiler "${CXXFLAGS}"
 CUDA_HOME=/usr/local/cuda
 CUDA_LIB=${CUDA_HOME}/lib64
 CUDA_INCLUDE=${CUDA_HOME}/include

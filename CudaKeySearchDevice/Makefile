@@ -10,10 +10,10 @@ cuda:
 	done
 
 	for file in ${CUSRC} ; do\
-		${NVCC} -c $$file -o $$file".o" ${NVCCFLAGS} -rdc=true ${INCLUDE} -I${CUDA_INCLUDE} -I${CUDA_MATH};\
+		${NVCC} -c $$file -o $$file".o" ${NVCCFLAGS} ${INCLUDE} -I${CUDA_INCLUDE} -I${CUDA_MATH};\
 	done
 
-	${NVCC} -dlink -o cuda_libs.o *.cu.o -lcudadevrt -lcudart
+	${NVCC} ${NVCCFLAGS} -dlink -o cuda_libs.o *.cu.o -lcudadevrt -lcudart
 
 	ar rvs ${LIBDIR}/lib$(NAME).a *.o
 
