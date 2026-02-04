@@ -245,7 +245,7 @@ __device__ void doIterationWithDouble(int pointsPerThread, int compression) {
 }
 
 // Fast kernel constants
-#define FAST_POINTS 4
+#define FAST_POINTS 16
 #define FAST_STEPS 1024
 
 __device__ void doIterationFast(int compression) {
