@@ -53,10 +53,23 @@ cuda::CudaDeviceInfo cuda::getDeviceInfo(int device)
         }
         break;
 	case 7:
+		// Volta (sm_70) and Turing (sm_75)
 		cores = 64;
 		break;
+	case 8:
+		// Ampere (sm_80, sm_86, sm_87) and Ada Lovelace (sm_89)
+		if(devInfo.minor == 0) {
+			cores = 64;  // GA100 (A100)
+		} else {
+			cores = 128; // GA10x (A10, A40, etc.) and AD10x (L4, RTX 4090, etc.)
+		}
+		break;
+	case 9:
+		// Hopper (sm_90)
+		cores = 128;
+		break;
     default:
-        cores = 8;
+        cores = 128; // Assume modern architecture for future GPUs
         break;
 	}
 	devInfo.cores = cores;
