@@ -918,7 +918,7 @@ beginBatchAddWithDoubleShared(const unsigned int *px, const unsigned int *py,
   writeIntShared(chain, batchIdx, inverse);
 }
 
-// Version where x is already loaded
+// Version where x is already loaded (linear shared memory layout)
 __device__ __forceinline__ static void
 beginBatchAddWithDoubleSharedReg(const unsigned int *px, const unsigned int *py,
                                  unsigned int x[8], unsigned int *chain,
@@ -930,7 +930,8 @@ beginBatchAddWithDoubleSharedReg(const unsigned int *px, const unsigned int *py,
     subModP(px, x, t);
   }
   mulModP(t, inverse);
-  writeIntShared(chain, batchIdx, inverse);
+  // Use linear layout: chain[batchIdx*8 ... batchIdx*8+7]
+  copyBigInt(inverse, &chain[batchIdx * 8]);
 }
 
 __device__ static void
@@ -943,7 +944,8 @@ completeBatchAddSharedReg(const unsigned int *px, const unsigned int *py,
   if (batchIdx >= 1) {
     unsigned int c[8];
 
-    readIntShared(chain, batchIdx - 1, c);
+    // Use linear layout: chain[(batchIdx-1)*8 ... (batchIdx-1)*8+7]
+    copyBigInt(&chain[(batchIdx - 1) * 8], c);
     mulModP(inverse, c, s);
 
     unsigned int diff[8];
