@@ -16,12 +16,12 @@
 #define MAX_TARGETS_CONSTANT_MEM 16
 
 __constant__ unsigned int _TARGET_HASH[MAX_TARGETS_CONSTANT_MEM][5];
-__constant__ unsigned int _NUM_TARGET_HASHES[1];
-__constant__ unsigned int *_BLOOM_FILTER[1];
-__constant__ unsigned int _BLOOM_FILTER_MASK[1];
-__constant__ unsigned long long _BLOOM_FILTER_MASK64[1];
+__constant__ unsigned int _NUM_TARGET_HASHES;
+__constant__ unsigned int *_BLOOM_FILTER;
+__constant__ unsigned int _BLOOM_FILTER_MASK;
+__constant__ unsigned long long _BLOOM_FILTER_MASK64;
 
-__constant__ unsigned int _USE_BLOOM_FILTER[1];
+__constant__ unsigned int _USE_BLOOM_FILTER;
 
 static unsigned int swp(unsigned int x) {
   return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) |
@@ -259,8 +259,8 @@ void CudaHashLookup::cleanup() {
 __device__ bool checkBloomFilter(const unsigned int hash[5]) {
   bool foundMatch = true;
 
-  unsigned int mask = _BLOOM_FILTER_MASK[0];
-  unsigned int *bloomFilter = _BLOOM_FILTER[0];
+  unsigned int mask = _BLOOM_FILTER_MASK;
+  unsigned int *bloomFilter = _BLOOM_FILTER;
 
   for (int i = 0; i < 5; i++) {
     unsigned int idx = hash[i] & mask;
@@ -278,8 +278,8 @@ __device__ bool checkBloomFilter(const unsigned int hash[5]) {
 __device__ bool checkBloomFilter64(const unsigned int hash[5]) {
   bool foundMatch = true;
 
-  unsigned long long mask = _BLOOM_FILTER_MASK64[0];
-  unsigned int *bloomFilter = _BLOOM_FILTER[0];
+  unsigned long long mask = _BLOOM_FILTER_MASK64;
+  unsigned int *bloomFilter = _BLOOM_FILTER;
   unsigned long long idx[5];
 
   idx[0] = ((unsigned long long)hash[0] << 32 | hash[1]) & mask;
@@ -308,12 +308,12 @@ __device__ bool checkBloomFilter64(const unsigned int hash[5]) {
 __device__ bool checkHash(const unsigned int hash[5]) {
   bool foundMatch = false;
 
-  if (*_USE_BLOOM_FILTER == 1) {
+  if (_USE_BLOOM_FILTER == 1) {
     return checkBloomFilter(hash);
-  } else if (*_USE_BLOOM_FILTER == 2) {
+  } else if (_USE_BLOOM_FILTER == 2) {
     return checkBloomFilter64(hash);
   } else {
-    for (int j = 0; j < *_NUM_TARGET_HASHES; j++) {
+    for (int j = 0; j < _NUM_TARGET_HASHES; j++) {
       bool equal = true;
       for (int i = 0; i < 5; i++) {
         equal &= (hash[i] == _TARGET_HASH[j][i]);

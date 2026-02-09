@@ -6,13 +6,12 @@
 #include "CudaDeviceKeys.h"
 #include "secp256k1.cuh"
 
-__constant__ unsigned int *_xPtr[1];
+__constant__ unsigned int *_xPtr;
+__constant__ unsigned int *_yPtr;
 
-__constant__ unsigned int *_yPtr[1];
+__device__ unsigned int *ec::getXPtr() { return _xPtr; }
 
-__device__ unsigned int *ec::getXPtr() { return _xPtr[0]; }
-
-__device__ unsigned int *ec::getYPtr() { return _yPtr[0]; }
+__device__ unsigned int *ec::getYPtr() { return _yPtr; }
 
 __global__ void multiplyStepKernel(const unsigned int *privateKeys,
                                    int pointsPerThread, int step,

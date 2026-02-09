@@ -19,7 +19,7 @@ __constant__ unsigned int _INC_X[8];
 
 __constant__ unsigned int _INC_Y[8];
 
-__constant__ unsigned int *_CHAIN[1];
+__constant__ unsigned int *_CHAIN;
 
 static unsigned int *_chainBufferPtr = NULL;
 
@@ -131,7 +131,7 @@ __device__ void setResultFound(int idx, bool compressed, unsigned int x[8],
 }
 
 __device__ void doIteration(int pointsPerThread, int compression) {
-  unsigned int *chain = _CHAIN[0];
+  unsigned int *chain = _CHAIN;
   unsigned int *xPtr = ec::getXPtr();
   unsigned int *yPtr = ec::getYPtr();
 
@@ -186,7 +186,7 @@ __device__ void doIteration(int pointsPerThread, int compression) {
 }
 
 __device__ void doIterationWithDouble(int pointsPerThread, int compression) {
-  unsigned int *chain = _CHAIN[0];
+  unsigned int *chain = _CHAIN;
   unsigned int *xPtr = ec::getXPtr();
   unsigned int *yPtr = ec::getYPtr();
 
