@@ -6,8 +6,8 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-static __constant__ void *_LIST_BUF[1];
-static __constant__ unsigned int *_LIST_SIZE[1];
+__constant__ void *_LIST_BUF[1];
+__constant__ unsigned int *_LIST_SIZE[1];
 
 __device__ void atomicListAdd(void *info, unsigned int size) {
   unsigned int count = atomicAdd(_LIST_SIZE[0], 1);

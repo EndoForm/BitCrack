@@ -59,15 +59,16 @@ cudaError_t CudaHashLookup::setTargetConstantMemory(
     }
   }
 
+  unsigned int count32 = (unsigned int)count;
   cudaError_t err =
-      cudaMemcpyToSymbol(_NUM_TARGET_HASHES, &count, sizeof(unsigned int));
+      cudaMemcpyToSymbol(_NUM_TARGET_HASHES, &count32, sizeof(unsigned int));
   if (err) {
     return err;
   }
 
   unsigned int useBloomFilter = 0;
-
-  err = cudaMemcpyToSymbol(_USE_BLOOM_FILTER, &useBloomFilter, sizeof(bool));
+  err = cudaMemcpyToSymbol(_USE_BLOOM_FILTER, &useBloomFilter,
+                           sizeof(unsigned int));
   if (err) {
     return err;
   }
@@ -204,8 +205,8 @@ cudaError_t CudaHashLookup::setTargetBloomFilter(
 
   // Copy device memory pointer to constant memory
   if (bloomFilterBits <= 32) {
-    err = cudaMemcpyToSymbol(_BLOOM_FILTER_MASK, &bloomFilterMask,
-                             sizeof(unsigned int *));
+    unsigned int mask32 = (unsigned int)bloomFilterMask;
+    err = cudaMemcpyToSymbol(_BLOOM_FILTER_MASK, &mask32, sizeof(unsigned int));
     if (err) {
       cudaFree(_bloomFilterPtr);
       _bloomFilterPtr = NULL;
@@ -214,7 +215,7 @@ cudaError_t CudaHashLookup::setTargetBloomFilter(
     }
   } else {
     err = cudaMemcpyToSymbol(_BLOOM_FILTER_MASK64, &bloomFilterMask,
-                             sizeof(unsigned long long *));
+                             sizeof(unsigned long long));
     if (err) {
       cudaFree(_bloomFilterPtr);
       _bloomFilterPtr = NULL;
