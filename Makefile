@@ -15,8 +15,8 @@ LIBS+=-L$(LIBDIR)
 CXX=g++
 CXXFLAGS=-O3 -std=c++17 -march=native
 
-# CUDA variables - NVIDIA RTX PRO 6000 (Blackwell, sm_100/120) on G4 VM
-COMPUTE_CAP=100
+# CUDA variables - NVIDIA RTX PRO 6000 (Blackwell fallback to Hopper, sm_90) on G4 VM
+COMPUTE_CAP=90
 NVCC=nvcc
 NVCCFLAGS=-std=c++17 -rdc=true -gencode=arch=compute_${COMPUTE_CAP},code=\"sm_${COMPUTE_CAP}\" -Xptxas="-v" -Xcompiler "${CXXFLAGS}"
 CUDA_HOME=/usr/local/cuda
